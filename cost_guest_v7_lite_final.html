@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>旅行費用分攤器 v7-lite-final（免存檔，完整可用）</title>
+<style>
+  :root{--bg:#fff8f5;--card:#ffffff;--text:#2b2b2b;--muted:#666;--accent:#ff7a59;--shadow:0 6px 18px rgba(0,0,0,.06);--radius:14px}
+  body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans TC","PingFang TC","Helvetica Neue",Arial,sans-serif}
+  .container{max-width:980px;margin:0 auto;padding:12px}
+  header{padding:16px;background:linear-gradient(135deg,#ffe4d8,#fff0c9 55%,#e6f7ff);border-bottom-left-radius:22px;border-bottom-right-radius:22px}
+  h1{font-size:20px;margin:0 0 6px}.sub{color:#666;font-size:13px}
+  .card{background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow);padding:12px;margin-top:14px}
+  .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  input,select,button{font-size:14px;border:1px solid #ddd;border-radius:8px;padding:8px 10px;background:#fff}
+  button{background:var(--accent);color:#fff;border:none;font-weight:600;box-shadow:var(--shadow);cursor:pointer}
+  button.secondary{background:#fff;color:#333;border:1px solid #ccc}
+  table{width:100%;border-collapse:collapse}th,td{padding:8px;border-bottom:1px solid #f0f0f0;text-align:left;font-size:13px}
+  .pill{display:inline-block;border:1px dashed #ffd0c2;border-radius:999px;padding:4px 8px;font-size:12px}
+  .muted{color:#777}
+  .right{margin-left:auto}
+  .badge{display:inline-block;padding:2px 6px;border-radius:999px;border:1px solid #eee;font-size:12px}
+  .adult{background:#e8fff0}.elder{background:#ffeaea}.c7{background:#fff7d6}.c6{background:#eef5ff}
+  .guest{background:#e9f6ff}.guest7{background:#f2f9ff}
+  .modal{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;align-items:center;justify-content:center;z-index:1000}
+  .modal.active{display:flex}
+  .modal-content{background:#fff;border-radius:14px;padding:16px;max-width:560px;width:92%;max-height:82%;overflow:auto}
+  .chip{display:inline-block;background:#fff;border:1px solid #ddd;border-radius:999px;padding:4px 8px;font-size:12px;margin:2px;cursor:pointer}
+  #msg{margin:8px 0;padding:6px 10px;background:#fff7e6;border:1px solid #ffcf99;border-radius:8px;color:#444;display:none}
+</style>
+</head>
+<body>
+<header class="card" style="margin-top:0">
+  <div class="container">
+    <h1>💰 旅行費用分攤器 v7-lite-final</h1>
+    <div class="sub">本檔不使用 localStorage，直接 file:// 打開可用。成人=1、7+孩=0.5、&lt;7=0；長輩不自付→差額由家族(成人/7+)分攤；客人/客人7+只付自己，不分攤長輩。</div>
+  </div>
+</header>
+
+<main class="container">
+  <div id="msg"></div>
+
+  <section class="card">
+    <h2>👨‍👩‍👧 人員名單</h2>
+    <div class="row">
+      <input id="pName" placeholder="姓名">
+      <select id="pType">
+        <option value="adult">成人</option><option value="elder">長輩</option>
+        <option value="c7">小孩7+</option><option value="c6">小孩&lt;7</option>
+        <option value="guest">客人</option><option value="guest7">客人的小孩7+</option>
+      </select>
+      <button id="addBtn">新增</button>
+      <button class="secondary" id="demoBtn">範例測試</button>
+      <button class="secondary" id="resetBtn">全部清空</button>
+    </div>
+    <table id="peopleTable"><thead><tr><th>姓名</th><th>類別</th><th>操作</th></tr></thead><tbody></tbody></table>
+  </section>
+
+  <section class="card">
+    <h2>🧾 代墊/花費</h2>
+    <div class="row">
+      <input id="eTitle" placeholder="項目">
+      <input id="eAmount" placeholder="金額" inputmode="decimal">
+      <select id="ePayer"></select>
+      <button id="addExpenseBtn">新增花費</button>
+    </div>
+    <div class="muted">可按「選人」調整參與者（有「全選 / 僅長輩 / 全不選」）。</div>
+    <table id="expenseTable"><thead><tr><th>項目</th><th>金額</th><th>付款者</th><th>參與人</th><th>操作</th></tr></thead><tbody></tbody></table>
+  </section>
+
+  <section class="card">
+    <h2>📊 結果結算</h2>
+    <div class="row">
+      <button id="calcBtn">重新計算</button>
+      <button class="secondary" id="mergeBtn">合併設定（委託付款）</button>
+      <span class="pill right" id="weightInfo"></span>
+    </div>
+    <div class="card" style="margin-top:8px">
+      <h3>代墊明細</h3>
+      <table id="detailsTable"><thead><tr><th>項目</th><th>金額</th><th>付款者</th><th>參與人</th></tr></thead><tbody></tbody></table>
+      <div class="muted" id="detailsEmpty" style="display:none">目前沒有任何費用，請先新增。</div>
+    </div>
+    <div class="card" style="margin-top:8px">
+      <h3>建議互相轉帳</h3>
+      <table id="settleTable"><thead><tr><th>由</th><th>轉給</th><th>金額</th></tr></thead><tbody></tbody></table>
+      <div class="muted" id="settleEmpty" style="display:none">目前不需要互相轉帳。</div>
+    </div>
+    <div class="card" style="margin-top:8px">
+      <h3>每人概況</h3>
+      <table id="balanceTable"><thead><tr><th>姓名</th><th>應付</th><th>已付</th><th>差額</th></tr></thead><tbody></tbody></table>
+    </div>
+  </section>
+</main>
+
+<div class="modal" id="modal"><div class="modal-content" id="modalContent"></div></div>
+
+<script>
+// ====== State (in-memory only) ======
+let people=[], expenses=[], mergeMap={};
+const EPS=0.01;
+
+// ====== Utils ======
+const msgBox=document.getElementById('msg');
+function showMsg(t){msgBox.textContent=t;msgBox.style.display='block';setTimeout(()=>msgBox.style.display='none',2200);}
+function typeLabel(t){return {adult:"成人",elder:"長輩",c7:"小孩7+",c6:"小孩<7",guest:"客人",guest7:"客人的小孩7+"}[t]||t;}
+function badgeClass(t){return t;}
+function baseWeight(type){ if(type==='adult'||type==='guest')return 1; if(type==='c7'||type==='guest7')return 0.5; return 0; }
+function norm(s){return (s||'').trim().replace(/\s+/g,' ').toLowerCase();}
+
+// ====== Modal helpers ======
+const modal=document.getElementById('modal'), modalContent=document.getElementById('modalContent');
+function showModal(html){modalContent.innerHTML=html;modal.classList.add('active');}
+function closeModal(){modal.classList.remove('active');}
+modal.addEventListener('click',e=>{if(e.target.id==='modal')closeModal();});
+
+// ====== People ======
+function renderPeople(){
+  const tb=document.querySelector('#peopleTable tbody'); tb.innerHTML='';
+  if(!people.length){const tr=document.createElement('tr');tr.innerHTML='<td colspan="3" class="muted">尚無成員，請先新增。</td>';tb.appendChild(tr);}
+  people.forEach((p,i)=>{
+    const tr=document.createElement('tr');
+    tr.innerHTML=`<td>${p.name}</td><td><span class="badge ${badgeClass(p.type)}">${typeLabel(p.type)}</span></td>
+      <td><button onclick="editPerson(${i})">修改</button> <button onclick="delPerson(${i})">刪除</button></td>`;
+    tb.appendChild(tr);
+  });
+  // payer select
+  const sel=document.getElementById('ePayer'); sel.innerHTML='';
+  people.forEach(p=>{const o=document.createElement('option');o.value=p.name;o.textContent=p.name;sel.appendChild(o)});
+}
+function addPerson(){
+  const n=document.getElementById('pName').value.trim();
+  const t=document.getElementById('pType').value;
+  if(!n)return showMsg('⚠️ 請輸入姓名');
+  if(people.find(x=>norm(x.name)===norm(n)))return showMsg('⚠️ 此姓名已存在');
+  people.push({name:n,type:t});
+  document.getElementById('pName').value='';
+  renderPeople(); renderExpenses(); calc();
+}
+function editPerson(i){
+  const p=people[i];
+  showModal(`<h3>修改人員</h3>
+    <div>姓名<br><input id="epName" value="${p.name}" style="width:100%"></div>
+    <div style="margin-top:6px">類別<br>
+      <select id="epType" style="width:100%">
+        ${["adult","elder","c7","c6","guest","guest7"].map(t=>`<option value="${t}" ${p.type===t?'selected':''}>${typeLabel(t)}</option>`).join('')}
+      </select>
+    </div>
+    <div style="text-align:right;margin-top:10px">
+      <button class="secondary" onclick="closeModal()">取消</button>
+      <button id="okBtn">儲存</button>
+    </div>`);
+  document.getElementById('okBtn').onclick=()=>{
+    const nn=document.getElementById('epName').value.trim(); const nt=document.getElementById('epType').value;
+    if(!nn){showMsg('⚠️ 姓名不可空白');return;}
+    if(people.some((x,idx)=>idx!==i && norm(x.name)===norm(nn))){showMsg('⚠️ 此姓名已存在');return;}
+    const old=people[i].name;
+    // 同步所有費用（參與者/付款者名字）
+    expenses=expenses.map(e=>{
+      const np=(e.participants||[]).map(n=>n===old?nn:n);
+      const npayer=(e.payer===old)?nn:e.payer;
+      return {...e,participants:np,payer:npayer};
+    });
+    people[i]={name:nn,type:nt};
+    closeModal(); renderPeople(); renderExpenses(); calc(); showMsg('✅ 已更新人員');
+  };
+}
+function delPerson(i){
+  if(!confirm('確定刪除此成員？'))return;
+  const name=people[i].name;
+  people.splice(i,1);
+  expenses=expenses.map(e=>({...e,participants:(e.participants||[]).filter(n=>n!==name)}));
+  renderPeople(); renderExpenses(); calc(); showMsg('🗑️ 已刪除成員');
+}
+
+// ====== Expenses ======
+function renderExpenses(){
+  const tb=document.querySelector('#expenseTable tbody'); tb.innerHTML='';
+  if(!expenses.length){const tr=document.createElement('tr');tr.innerHTML='<td colspan="5" class="muted">尚無費用，請新增。</td>';tb.appendChild(tr);}
+  expenses.forEach((e,i)=>{
+    const tr=document.createElement('tr');
+    tr.innerHTML=`<td>${e.title}</td><td>${e.amount}</td><td>${e.payer}</td><td>${(e.participants||[]).join(", ")}</td>
+      <td><button onclick="editExpense(${i})">修改</button> <button onclick="editParticipants(${i})">選人</button> <button onclick="delExpense(${i})">刪除</button></td>`;
+    tb.appendChild(tr);
+  });
+  renderDetails();
+}
+function addExpense(){
+  if(!people.length){showMsg('⚠️ 請先建立人員');return;}
+  const t=(document.getElementById('eTitle').value||'未命名').trim()||'未命名';
+  const a=parseFloat(document.getElementById('eAmount').value);
+  const p=document.getElementById('ePayer').value;
+  if(!isFinite(a)||a<=0){showMsg('⚠️ 請輸入正確金額');return;}
+  if(!p){showMsg('⚠️ 需選擇付款者');return;}
+  const parts=people.map(pp=>pp.name);
+  expenses.push({title:t,amount:a,payer:p,participants:parts});
+  document.getElementById('eTitle').value=''; document.getElementById('eAmount').value='';
+  renderExpenses(); calc(); showMsg('✅ 已新增費用');
+}
+function editExpense(i){
+  const e=expenses[i];
+  showModal(`<h3>修改費用</h3>
+    <div>項目<br><input id="et" value="${e.title}" style="width:100%"></div>
+    <div class="row" style="margin-top:6px">
+      <label>金額 <input id="ea" value="${e.amount}" inputmode="decimal" style="width:120px"></label>
+      <label>付款者 
+        <select id="epSel">${people.map(pp=>`<option ${pp.name===e.payer?'selected':''}>${pp.name}</option>`).join('')}</select>
+      </label>
+    </div>
+    <div style="margin-top:10px;text-align:right">
+      <button class="secondary" onclick="closeModal()">取消</button>
+      <button id="okBtn">儲存</button>
+    </div>`);
+  document.getElementById('okBtn').onclick=()=>{
+    const nt=(document.getElementById('et').value||'未命名').trim();
+    const na=parseFloat(document.getElementById('ea').value);
+    const np=document.getElementById('epSel').value;
+    if(!isFinite(na)||na<=0){showMsg('⚠️ 金額不正確');return;}
+    expenses[i]={...e,title:nt,amount:na,payer:np};
+    closeModal(); renderExpenses(); calc(); showMsg('✅ 已更新費用');
+  };
+}
+function delExpense(i){
+  if(!confirm('確定刪除此費用？'))return;
+  expenses.splice(i,1);
+  renderExpenses(); calc(); showMsg('🗑️ 已刪除費用');
+}
+function editParticipants(i){
+  const e=expenses[i];
+  const checks=people.map(p=>`<label style="display:block;margin:4px 0">
+    <input type="checkbox" value="${p.name}" ${e.participants.includes(p.name)?'checked':''}>
+    ${p.name}（${typeLabel(p.type)}）
+  </label>`).join('');
+  showModal(`<h3>選擇參與者：${e.title}</h3>
+    <div style="max-height:50vh;overflow:auto">${checks}</div>
+    <div style="margin:8px 0">
+      <span class="chip" id="allSel">全選</span>
+      <span class="chip" id="eldSel">僅長輩</span>
+      <span class="chip" id="noneSel">全不選</span>
+    </div>
+    <div style="text-align:right">
+      <button class="secondary" onclick="closeModal()">取消</button>
+      <button id="okBtn">套用</button>
+    </div>`);
+  document.getElementById('allSel').onclick=()=>{document.querySelectorAll('#modal input[type=checkbox]').forEach(c=>c.checked=true)};
+  document.getElementById('eldSel').onclick=()=>{document.querySelectorAll('#modal input[type=checkbox]').forEach(c=>{const n=c.value;const t=(people.find(p=>p.name===n)||{}).type; c.checked=(t==='elder');})};
+  document.getElementById('noneSel').onclick=()=>{document.querySelectorAll('#modal input[type=checkbox]').forEach(c=>c.checked=false)};
+  document.getElementById('okBtn').onclick=()=>{
+    const sel=[...document.querySelectorAll('#modal input[type=checkbox]')].filter(c=>c.checked).map(c=>c.value);
+    expenses[i].participants=sel; closeModal(); renderExpenses(); calc(); showMsg('✅ 已更新參與者');
+  };
+}
+
+// ====== Details ======
+function renderDetails(){
+  const tb=document.querySelector('#detailsTable tbody'); tb.innerHTML='';
+  if(!expenses.length){document.getElementById('detailsEmpty').style.display='block'; return;}
+  document.getElementById('detailsEmpty').style.display='none';
+  expenses.forEach(e=>{
+    const tr=document.createElement('tr');
+    tr.innerHTML=`<td>${e.title}</td><td>${e.amount}</td><td>${e.payer}</td><td>${(e.participants||[]).join(", ")}</td>`;
+    tb.appendChild(tr);
+  });
+}
+
+// ====== Merge (delegation) ======
+function openMerge(){
+  if(!people.length){showMsg('⚠️ 請先新增成員');return;}
+  const opts=people.map(p=>`
+    <label style="display:block;margin:6px 0">
+      ${p.name} 由
+      <select data-child="${p.name}">
+        <option value="">自己</option>
+        ${people.map(pp=>`<option value="${pp.name}" ${mergeMap[p.name]===pp.name?'selected':''}>${pp.name}</option>`).join('')}
+      </select>
+      代付
+    </label>`).join('');
+  showModal(`<h3>合併設定（委託付款）</h3>
+    <div class="muted">被委託人的差額會併入委託者，轉帳建議只列委託者出面。</div>
+    ${opts}
+    <div style="text-align:right;margin-top:10px">
+      <button class="secondary" onclick="closeModal()">取消</button>
+      <button id="okBtn">儲存</button>
+    </div>`);
+  document.getElementById('okBtn').onclick=()=>{
+    const map={}; document.querySelectorAll('#modal select').forEach(s=>{
+      const child=s.getAttribute('data-child'); const parent=s.value||'';
+      if(parent && child!==parent){ map[child]=parent; }
+    });
+    mergeMap=map; closeModal(); calc(); showMsg('✅ 已更新合併設定');
+  };
+}
+
+// ====== Calculation ======
+// 規則：
+// - 客人/客人7+：只分自己的權重，不分攤長輩份
+// - 家族(成人/7+)：分自己 + 長輩份（按家族權重比例）
+// - 長輩/小孩<7：0
+function calc(){
+  const names=[...new Set([...people.map(p=>p.name),...expenses.map(e=>e.payer)])].filter(Boolean);
+  const paid=Object.fromEntries(names.map(n=>[n,0]));
+  const owe=Object.fromEntries(names.map(n=>[n,0]));
+
+  expenses.forEach(e=>{
+    const part=(e.participants||[]).slice();
+    const fam = part.filter(n=>['adult','c7'].includes((people.find(p=>p.name===n)||{}).type));
+    const gst = part.filter(n=>['guest','guest7'].includes((people.find(p=>p.name===n)||{}).type));
+    const eld = part.filter(n=>['elder'].includes((people.find(p=>p.name===n)||{}).type));
+
+    const wFam = fam.reduce((s,n)=>s+baseWeight((people.find(p=>p.name===n)||{}).type),0);
+    const wGst = gst.reduce((s,n)=>s+baseWeight((people.find(p=>p.name===n)||{}).type),0);
+    const wEld = eld.length; // 每位長輩=1 單位消費（不自付）
+
+    const denom = wFam + wGst + wEld;
+    paid[e.payer]=(paid[e.payer]||0)+ (e.amount||0);
+    if(denom<=EPS) return;
+
+    const u = (e.amount||0)/denom;
+    // 自己的消費
+    fam.forEach(n=>{const t=(people.find(p=>p.name===n)||{}).type; owe[n]+= u*baseWeight(t);});
+    gst.forEach(n=>{const t=(people.find(p=>p.name===n)||{}).type; owe[n]+= u*baseWeight(t);});
+    // 長輩份只加到家族
+    const elderAmt = u*wEld;
+    if(wFam>EPS && elderAmt>EPS){
+      fam.forEach(n=>{const t=(people.find(p=>p.name===n)||{}).type; const w=baseWeight(t); owe[n]+= elderAmt*(w/wFam);});
+    }
+  });
+
+  // 合併（委託）：把 child 的差額併到 parent
+  let balances=Object.fromEntries(names.map(n=>[n,(paid[n]||0)-(owe[n]||0)]));
+  Object.entries(mergeMap||{}).forEach(([child,parent])=>{
+    if(child && parent && child!==parent){
+      balances[parent]=(balances[parent]||0)+(balances[child]||0);
+      balances[child]=0;
+    }
+  });
+
+  // 每人概況
+  const bt=document.querySelector('#balanceTable tbody'); bt.innerHTML='';
+  names.forEach(n=>{
+    const tr=document.createElement('tr');
+    tr.innerHTML=`<td>${n}</td><td>${Math.round(owe[n]||0)}</td><td>${Math.round(paid[n]||0)}</td><td>${Math.round((paid[n]||0)-(owe[n]||0))}</td>`;
+    bt.appendChild(tr);
+  });
+
+  // 轉帳建議
+  const creditors=Object.entries(balances).filter(([n,v])=> (v||0) > EPS).map(([n,v])=>({n,v})).sort((a,b)=>b.v-a.v);
+  const debtors=Object.entries(balances).filter(([n,v])=> (v||0) < -EPS).map(([n,v])=>({n,-v})).sort((a,b)=>b.v-a.v);
+  const st=document.querySelector('#settleTable tbody'); st.innerHTML='';
+  if(creditors.length===0 && debtors.length===0){ document.getElementById('settleEmpty').style.display='block'; }
+  else { document.getElementById('settleEmpty').style.display='none'; }
+  let i=0,j=0;
+  while(i<debtors.length && j<creditors.length){
+    const d=debtors[i], c=creditors[j];
+    const pay=Math.min(d.v,c.v);
+    const tr=document.createElement('tr'); tr.innerHTML=`<td>${d.n}</td><td>${c.n}</td><td>${Math.round(pay)}</td>`; st.appendChild(tr);
+    d.v-=pay; c.v-=pay;
+    if(d.v<=EPS) i++; if(c.v<=EPS) j++;
+  }
+
+  // 權重提示
+  const totalW = people.reduce((s,p)=>s+baseWeight(p.type),0);
+  document.getElementById('weightInfo').textContent = '總權重（不含長輩）：'+totalW;
+
+  renderDetails();
+}
+
+// ====== Buttons ======
+document.getElementById('addBtn').onclick=addPerson;
+document.getElementById('addExpenseBtn').onclick=addExpense;
+document.getElementById('calcBtn').onclick=calc;
+document.getElementById('mergeBtn').onclick=openMerge;
+document.getElementById('demoBtn').onclick=()=>{
+  people=[
+    {name:"A",type:"adult"},{name:"B",type:"adult"},{name:"C",type:"elder"},
+    {name:"D",type:"guest"},{name:"E",type:"guest7"}
+  ];
+  expenses=[
+    {title:"晚餐",amount:3000,payer:"A",participants:["A","B","C","D","E"]},
+    {title:"早餐",amount:600,payer:"D",participants:["D","E"]},
+    {title:"長輩醫療費",amount:2000,payer:"B",participants:["C"]}
+  ];
+  mergeMap={};
+  renderPeople(); renderExpenses(); calc(); showMsg('✅ 已載入範例資料');
+};
+document.getElementById('resetBtn').onclick=()=>{
+  if(!confirm('確定清空所有資料？'))return;
+  people=[]; expenses=[]; mergeMap={};
+  renderPeople(); renderExpenses(); calc(); showMsg('🧹 已全部清空');
+};
+
+// ====== Init ======
+renderPeople(); renderExpenses(); calc(); showMsg('✅ 載入完成，可開始操作');
+</script>
+</body>
+</html>
